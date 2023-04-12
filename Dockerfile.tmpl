@@ -11,7 +11,7 @@ ARG TARGETPLATFORM
 ARG TARGETARCH
 
 RUN apt-get update \
-    && apt-get install -y asciidoctor bison build-essential cmake curl gnupg libaspell-dev libcurl4-gnutls-dev libgcrypt20-dev libjson-c-dev libncursesw5-dev libgnutls28-dev libwebsockets-dev pkg-config python3-dev zlib1g-dev \
+    && apt-get install -y asciidoctor bison build-essential cmake curl gnupg libaspell-dev libcurl4-gnutls-dev libgcrypt20-dev libjson-c-dev libncursesw5-dev libgnutls28-dev libwebsockets-dev pkg-config python3-dev zlib1g-dev libzstd-dev \
     && apt clean all
 
 WORKDIR /build
@@ -49,7 +49,7 @@ RUN cd /build/apps/weechat \
  && asciidoctor -b manpage /build/apps/weechat/doc/en/weechat.1.en.adoc
 
 ###############
-FROM python:3 as python-builder
+FROM python:3.10 as python-builder
 
 RUN apt-get update \
     && apt-get install -y build-essential gzip pandoc \
@@ -64,7 +64,7 @@ COPY . /build
 
 RUN cd /build/apps/lndmanage && python -m venv .venv
 ENV PATH="/build/apps/lndmanage/.venv/bin:$PATH"
-RUN cd /build/apps/lndmanage && pip install wheel && pip install -r requirements.txt
+RUN cd /build/apps/lndmanage && pip install wheel && pip install .
 
 RUN cd /build/apps/suez && /root/.local/bin/poetry export -f requirements.txt --output requirements.txt --without-hashes
 
@@ -81,7 +81,14 @@ RUN mkdir -p /opt \
     /opt
 
 ###############
-FROM golang:1.17-${DEBIAN_VERSION} AS golang-builder
+FROM node:lts-alpine AS circuitbreaker-build_frontend
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+COPY apps/circuitbreaker/web .
+RUN yarn install --frozen-lockfile --network-timeout 1000000 && yarn build-export
+
+###############
+FROM golang:1.19-${DEBIAN_VERSION} AS golang-builder
 ARG TARGETPLATFORM
 ARG TARGETARCH
 
@@ -95,14 +102,15 @@ COPY . /build
 ENV GOARCH=${TARGETARCH}
 ENV GOOS=linux
 
+COPY --from=circuitbreaker-build_frontend /webui-build/ /build/apps/circuitbreaker/webui-build/
 RUN cd /build/apps/circuitbreaker && mkdir bin && go build -o bin/circuitbreaker
 
-RUN cd /build/apps/lntop && mkdir bin && go build -o bin/lntop cmd/lntop/main.go
+RUN cd /build/apps/lntop && mkdir bin && go build -o bin/lntop
 
 RUN cd /build/apps/whatsat && mkdir bin && go build -o bin/whatsat
 
 ###############
-FROM rust:slim-${DEBIAN_VERSION} AS rust-builder
+FROM rust:${DEBIAN_VERSION} AS rust-builder
 
 RUN apt-get update \
     && apt-get install -y gzip libssl-dev pandoc pkg-config \
@@ -123,7 +131,7 @@ RUN cd /build/apps/gping && cargo build --release
 RUN cd /build/apps/oha && cargo build --release
 
 ###############
-FROM python:3.8-slim-${DEBIAN_VERSION}
+FROM python:3.10-slim-${DEBIAN_VERSION}
 
 ARG node_version
 
@@ -224,7 +232,7 @@ COPY \
     /build/apps/weechat/doc/en/weechat.1 \
     /usr/local/share/man/man1/
 COPY --from=python-builder /build/apps/apps.7.gz /usr/share/man/man7/
-COPY --from=golang-builder /build/apps/circuitbreaker/circuitbreaker-example.yaml /opt/circuitbreaker/
+#COPY --from=golang-builder /build/apps/circuitbreaker/circuitbreaker-example.yaml /opt/circuitbreaker/
 COPY --from=rust-builder /build/apps/dog/man/dog.1.gz /usr/local/share/man/man1/
 
 COPY \
