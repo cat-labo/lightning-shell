@@ -12,7 +12,7 @@ on:
 jobs:
   build:
     name: Build image
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout project
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           submodules: recursive
 
@@ -35,17 +35,17 @@ jobs:
           echo "IMAGE_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
 
       - name: Setup Docker buildx action
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
 
       - name: Run Docker buildx
         run: |
@@ -59,7 +59,7 @@ jobs:
 
   create-manifest:
     name: Create two-architecture manifest
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: build
     strategy:
       matrix:
@@ -69,7 +69,7 @@ jobs:
 
     steps:
       - name: Checkout project
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set env variables
         run: |
@@ -77,7 +77,7 @@ jobs:
           echo "IMAGE_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
